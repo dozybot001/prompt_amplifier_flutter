@@ -137,9 +137,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       showDialog(
         context: context,
         barrierColor: Colors.transparent,
-        builder: (context) => Stack(
+        builder: (context) => const Stack(
           children: [
-            Positioned(top: 60, right: 20, child: const SettingsDialog()),
+            Positioned(top: 60, right: 20, child: SettingsDialog()),
           ],
         ),
       );
@@ -292,7 +292,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   SliverAppBar _buildSliverAppBar(ThemeData theme, String lang, EditorState state, EditorNotifier notifier, bool isMobile) {
     return SliverAppBar(
       pinned: true,
-      backgroundColor: theme.colorScheme.surface.withOpacity(_isScrolled ? 0.9 : 0.0),
+      backgroundColor: theme.colorScheme.surface.withValues(alpha: _isScrolled ? 0.9 : 0.0),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       titleSpacing: 24,
@@ -442,7 +442,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       padding: const EdgeInsets.all(32),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow.withOpacity(0.8),
+        color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
@@ -463,7 +463,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: theme.colorScheme.outlineVariant),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,7 +522,7 @@ class _WizardOptionCardState extends State<WizardOptionCard> {
       margin: const EdgeInsets.only(bottom: 20),
       elevation: 0,
       color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
