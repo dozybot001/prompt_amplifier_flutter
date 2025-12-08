@@ -1,43 +1,26 @@
 pluginManagement {
-    val flutterSdkPath = try {
-        val properties = java.util.Properties()
-        file("local.properties").inputStream().use { properties.load(it) }
-        properties.getProperty("flutter.sdk")
-    } catch (e: Exception) {
-        null
-    }
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
 
-    val flutterPubCache = try {
-        val properties = java.util.Properties()
-        file("local.properties").inputStream().use { properties.load(it) }
-        properties.getProperty("flutter.pub-cache")
-    } catch (e: Exception) {
-        null
-    }
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        // --- 这里强制优先使用阿里云 ---
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        // ---------------------------
         google()
         mavenCentral()
         gradlePluginPortal()
     }
 }
 
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS) // 关键：强制使用这里的配置
-    repositories {
-        // --- 这里也要加阿里云 ---
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        // ---------------------
-        google()
-        mavenCentral()
-    }
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "8.11.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
 }
 
 include(":app")

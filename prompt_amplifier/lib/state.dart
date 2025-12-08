@@ -2,12 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_service.dart';
 import 'app_strings.dart';
-
-// ... (AppSettings 和 SettingsNotifier 保持不变) ...
-// 为节省篇幅，在此省略 Settings 部分，请保持原文件该部分代码不变
+import 'models.dart'; 
 
 // ==========================================
-// 1. 设置模块 (Settings) - 简写占位，实际文件中请保留完整代码
+// 1. 设置模块 (Settings)
 // ==========================================
 class AppSettings {
   final String apiKey;
@@ -52,21 +50,7 @@ final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((r
 // 2. 编辑器模块 (Editor)
 // ==========================================
 
-class WizardDimension {
-  final String title;
-  final List<String> options;
-  String? selected;
-
-  WizardDimension({required this.title, required this.options, this.selected});
-
-  WizardDimension copyWith({String? title, List<String>? options, String? selected}) {
-    return WizardDimension(
-      title: title ?? this.title,
-      options: options ?? this.options,
-      selected: selected ?? this.selected,
-    );
-  }
-}
+// 注意：WizardDimension 类已被移除，现在通过 import 'models.dart' 引入
 
 enum LoadingAction { none, analyzing, generatingMore, synthesizing }
 
@@ -157,7 +141,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
     state = state.copyWith(wizardSteps: newSteps);
   }
 
-  // 6. 合成 Prompt (修复：添加数据清洗逻辑)
+  // 6. 合成 Prompt
   Future<void> synthesizeFinalResult(String instruction) async {
     if (state.wizardSteps == null) return;
     _checkApiKey();
@@ -165,7 +149,6 @@ class EditorNotifier extends StateNotifier<EditorState> {
     try {
       final settings = ref.read(settingsProvider);
 
-      // 清洗数据：去除换行符和首尾空格，避免破坏 Prompt 结构
       final selectedOptions = state.wizardSteps!
           .where((s) => s.selected != null && s.selected!.trim().isNotEmpty)
           .map((s) {

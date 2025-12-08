@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'dart:convert';
-import 'state.dart';
+import 'models.dart';
 
 class AiService {
   final Dio _dio = Dio();

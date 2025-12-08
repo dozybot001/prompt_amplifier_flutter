@@ -8,7 +8,7 @@
 PRODUCT_NAME = prompt_amplifier
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.yourname.promptamplifier.promptAmplifier
+PRODUCT_BUNDLE_IDENTIFIER = com.dozybot.promptamplifier.promptAmplifier
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.yourname.promptamplifier. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2025 com.dozybot.promptamplifier. All rights reserved.
