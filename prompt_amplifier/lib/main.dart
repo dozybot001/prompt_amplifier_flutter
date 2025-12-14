@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_router.dart';
+import 'state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: MyApp()));
+
+  // 1. 创建一个 ProviderContainer，它就像一个“状态仓库”
+  final container = ProviderContainer();
+
+  // 2. 在启动 UI 之前，强制读取并等待设置加载完成
+  // 这样当 UI 显示的第一帧，语言和 API Key 就已经是正确的了
+  await container.read(settingsProvider.notifier).loadSettings();
+
+  // 3. 启动 App，使用 UncontrolledProviderScope 注入我们要预热好的 container
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

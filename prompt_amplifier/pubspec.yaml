@@ -29,6 +29,10 @@ dependencies:
   # 网络请求
   dio: ^5.4.0
 
+  shared_preferences: ^2.3.2
+
+  intl: ^0.19.0 # 用于格式化时间
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -36,3 +40,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  

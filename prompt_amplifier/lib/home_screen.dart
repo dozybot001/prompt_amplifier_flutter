@@ -3,9 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'state.dart';
-import 'models.dart';
 import 'app_strings.dart';
 import 'settings_dialog.dart';
+import 'widgets/input_area.dart';
+import 'widgets/result_area.dart';
+import 'widgets/wizard_card.dart';
+import 'widgets/history_drawer.dart';
+import 'dart:async' as java_async;
+
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +24,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   final GlobalKey _wizardListKey = GlobalKey();
   final GlobalKey _resultAreaKey = GlobalKey();
-  final GlobalKey _bottomLoaderKey = GlobalKey(); // 新增：用于定位底部加载条
+  final GlobalKey _bottomLoaderKey = GlobalKey();
 
   bool _isScrolled = false;
 
@@ -54,10 +59,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           context,
           duration: const Duration(milliseconds: 600),
           curve: Curves.easeOutQuart,
-          alignment: 0.0, // 0.0 = 顶部对齐, 1.0 = 底部对齐
+          alignment: 0.0,
         );
       } else {
-        // 如果 Key 还没渲染出来（例如在列表极底部），尝试直接滚到底
         if (_scrollController.hasClients && key == _bottomLoaderKey) {
           _scrollController.animateTo(
             _scrollController.position.maxScrollExtent,
@@ -75,23 +79,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // 优化后的 Toast：宽大、长驻、可关闭
   void _showGeminiToast(String message) {
     if (!mounted) return;
+    
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                maxLines: 10, 
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: const Color(0xFF303030),
+        backgroundColor: const Color(0xFF323232), // 深灰色背景
         behavior: SnackBarBehavior.floating,
-        width: 340, // 稍微加宽以容纳长错误信息
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 10), // 显示10秒
+        action: SnackBarAction(
+          label: '关闭',
+          textColor: Colors.blueAccent,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
       ),
     );
   }
@@ -156,7 +178,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final lang = settings.language;
 
     final bool isMobile = MediaQuery.of(context).size.width < 640;
-
     final bool hasWizard = state.wizardSteps != null;
     final bool isAnalyzing = state.loadingAction == LoadingAction.analyzing;
     final bool isGeneratingMore = state.loadingAction == LoadingAction.generatingMore;
@@ -165,6 +186,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
+      drawer: HistoryDrawer(
+        onRestore: (prompt) {
+           // 恢复逻辑：直接把 prompt 显示到结果区，或者复制
+           // 这里简单的处理是：直接更新 State 的 resultText
+           // 但 EditorState 是 immutable 的，我们需要在 Notifier 里加一个方法
+           // 或者暂时仅仅是复制到剪贴板，或者更新 UI 显示
+           // 建议在 EditorNotifier 加一个 restoreResult 方法
+           ref.read(editorProvider.notifier).restoreResult(prompt);
+           // 滚动到底部
+           Future.delayed(const Duration(milliseconds: 300), () => _scrollToKey(_resultAreaKey));
+        }
+      ),
       bottomNavigationBar: isMobile ? _buildMobileBottomBar(state, theme, lang) : null,
       body: CustomScrollView(
         controller: _scrollController,
@@ -185,7 +218,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     if (!hasWizard && !isAnalyzing) _buildStaticHeader(theme, lang),
                     const SizedBox(height: 32),
-                    _buildInputArea(theme, lang, state, notifier),
+                    
+                    InputArea(
+                      controller: _inputController, 
+                      isLoading: state.isLoading, 
+                      lang: lang, 
+                      onSend: () => _handleSend(notifier)
+                    ),
+                    
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -216,11 +256,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             notifier: notifier,
                             lang: lang,
                             theme: theme,
-                          );
+                          )
+                          // ✅ 新增：交错动画，每个卡片延迟 100ms 出现
+                          .animate()
+                          .fadeIn(duration: 600.ms, delay: (100 * index).ms)
+                          .slideX(begin: 0.2, end: 0, curve: Curves.easeOutQuad); 
                         },
                       ),
 
-                      // 修改：给 Loading 加上 Key，并确保它在列表下方
                       if (isGeneratingMore)
                         _buildLoadingPlaceholder(theme, AppStrings.get('loadingDimensions', lang), key: _bottomLoaderKey),
 
@@ -244,7 +287,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _buildLoadingPlaceholder(theme, AppStrings.get('synthesizing', lang)),
 
                     if (hasResult)
-                      _buildResultArea(theme, lang, state.resultText!),
+                      ResultArea(resultText: state.resultText!, lang: lang),
                   ],
                 ),
               ),
@@ -257,7 +300,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // === 拆分出的 UI 组件 ===
+  // === 局部 UI 组件 ===
 
   BottomAppBar _buildMobileBottomBar(EditorState state, ThemeData theme, String lang) {
     return BottomAppBar(
@@ -282,7 +325,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           IconButton.outlined(
             icon: const Icon(Icons.settings_outlined, size: 26),
             tooltip: AppStrings.get('settingsTooltip', lang),
-            onPressed: _showSettings,
+            onPressed: () {
+               // 移动端也添加拦截逻辑
+               if (state.isLoading) {
+                _showGeminiToast("正在输出中，请稍后点击设置");
+                return;
+              }
+              _showSettings();
+            },
             style: IconButton.styleFrom(fixedSize: const Size(56, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), side: BorderSide(color: theme.colorScheme.outline)),
           ),
         ],
@@ -314,14 +364,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: AppStrings.get('reset', lang),
-            onPressed: () => _handleReset(notifier),
+            onPressed: () {
+              if (state.isLoading) {
+                _showGeminiToast("正在输出中，请稍后点击重置");
+                return;
+              }
+              _handleReset(notifier);
+            },
             style: IconButton.styleFrom(padding: const EdgeInsets.all(12)),
           ),
           const SizedBox(width: 8),
+
+          // ... 
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: '历史记录',
+            onPressed: () {
+               if (state.isLoading) return; // 拦截
+               Scaffold.of(context).openDrawer(); // 打开抽屉
+            },
+            style: IconButton.styleFrom(padding: const EdgeInsets.all(12)),
+          ),
+          const SizedBox(width: 8),
+          // ... 设置按钮
+          
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: AppStrings.get('settingsTooltip', lang),
-            onPressed: _showSettings,
+            onPressed: () {
+              if (state.isLoading) {
+                _showGeminiToast("正在输出中，请稍后点击设置");
+                return;
+              }
+              _showSettings();
+            },
             style: IconButton.styleFrom(padding: const EdgeInsets.all(12)),
           ),
           const SizedBox(width: 24),
@@ -350,49 +426,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildInputArea(ThemeData theme, String lang, EditorState state, EditorNotifier notifier) {
-    return Container(
-      decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(28)),
-      padding: const EdgeInsets.fromLTRB(24, 8, 8, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _inputController,
-              decoration: InputDecoration(hintText: AppStrings.get('inputHint', lang), border: InputBorder.none, isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 12)),
-              style: const TextStyle(fontSize: 18),
-              onSubmitted: (_) => _handleSend(notifier),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: state.isLoading ? null : () => _handleSend(notifier),
-            icon: state.isLoading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)) : const Icon(Icons.arrow_upward_rounded, size: 28),
-            style: IconButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: theme.colorScheme.onPrimary, padding: const EdgeInsets.all(12), minimumSize: const Size(56, 56)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons(BuildContext context, String lang, EditorState state, EditorNotifier notifier, ThemeData theme, bool isMobile) {
+    // 状态定义
+    final bool isAnalyzing = state.loadingAction == LoadingAction.analyzing;
+    final bool isGeneratingMore = state.loadingAction == LoadingAction.generatingMore;
+    final bool isSynthesizing = state.loadingAction == LoadingAction.synthesizing;
+    
+    // 修复点：明确定义 isDisabled，用于禁用辅助按钮
     final bool isDisabled = state.isLoading;
 
-    final Widget generateButton = FilledButton.icon(
-      onPressed: isDisabled ? null : () => _handleSynthesize(notifier),
-      icon: const Icon(Icons.auto_awesome),
-      label: Text(AppStrings.get('generatePrompt', lang)),
-      style: FilledButton.styleFrom(
-        minimumSize: isMobile ? const Size.fromHeight(56) : null,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-    );
+    // 按钮逻辑：合成中显示停止，否则显示生成
+    final Widget generateButton = isSynthesizing
+        ? FilledButton.icon(
+            onPressed: () => notifier.stopGeneration(),
+            icon: const SizedBox(
+              width: 20, 
+              height: 20, 
+              child: CircularProgressIndicator(
+                color: Colors.white, 
+                strokeWidth: 2,
+              ),
+            ),
+            label: const Text("强制停止"), 
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              foregroundColor: theme.colorScheme.onError,
+              minimumSize: isMobile ? const Size.fromHeight(56) : null,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          )
+        : FilledButton.icon(
+            onPressed: (isAnalyzing || isGeneratingMore) ? null : () => _handleSynthesize(notifier),
+            icon: const Icon(Icons.auto_awesome),
+            label: Text(AppStrings.get('generatePrompt', lang)),
+            style: FilledButton.styleFrom(
+              minimumSize: isMobile ? const Size.fromHeight(56) : null,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          );
 
     final Widget actionRow = Row(
       mainAxisAlignment: isMobile ? MainAxisAlignment.spaceBetween : MainAxisAlignment.end,
       children: [
         TextButton.icon(
+          // 使用 isDisabled 禁用按钮
           onPressed: isDisabled ? null : () => notifier.addCustomDimension(),
           icon: const Icon(Icons.edit_note),
           label: Text(AppStrings.get('addCustomField', lang)),
@@ -403,12 +482,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         OutlinedButton.icon(
           onPressed: isDisabled ? null : () async {
             try {
-              // 触发生成，并立即滚动到底部的 Loader
               final future = notifier.generateMoreDimensions(_inputController.text);
-
-              // 延迟一小段时间等待 UI 渲染出 Loader，然后滚动
               Future.delayed(const Duration(milliseconds: 100), () => _scrollToKey(_bottomLoaderKey));
-
               await future;
             } catch (e) {
               if (mounted) _showGeminiToast(e.toString());
@@ -436,7 +511,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  // 修改 _buildLoadingPlaceholder 方法
   Widget _buildLoadingPlaceholder(ThemeData theme, String text, {Key? key}) {
+    // 如果是分析阶段，使用循环文字；其他阶段保持静态
+    final bool isAnalyzing = text.contains("分析"); // 简单判断
+
     return Container(
       key: key,
       margin: const EdgeInsets.only(bottom: 24),
@@ -450,137 +529,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3)),
           const SizedBox(height: 16),
-          Text(text, style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.w500)),
+          // ✅ 修改这里
+          isAnalyzing 
+            ? CyclingLoadingText(baseText: text)
+            : Text(text, style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.w500)),
         ],
       ),
     ).animate().fadeIn();
   }
-
-  Widget _buildResultArea(ThemeData theme, String lang, String resultText) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 48),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(AppStrings.get('finalPromptTitle', lang), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 24),
-          SelectableText(resultText, style: const TextStyle(fontSize: 16, height: 1.6, fontFamily: 'Microsoft YaHei')),
-        ],
-      ),
-    ).animate().fadeIn().scale(begin: const Offset(0.98, 0.98));
-  }
 }
 
-class WizardOptionCard extends StatefulWidget {
-  final WizardDimension step;
-  final EditorNotifier notifier;
-  final String lang;
-  final ThemeData theme;
+// lib/home_screen.dart (添加到文件最底部)
 
-  const WizardOptionCard({super.key, required this.step, required this.notifier, required this.lang, required this.theme});
+class CyclingLoadingText extends StatefulWidget {
+  final String baseText;
+  const CyclingLoadingText({super.key, required this.baseText});
 
   @override
-  State<WizardOptionCard> createState() => _WizardOptionCardState();
+  State<CyclingLoadingText> createState() => _CyclingLoadingTextState();
 }
 
-class _WizardOptionCardState extends State<WizardOptionCard> {
-  late TextEditingController _customInputController;
+class _CyclingLoadingTextState extends State<CyclingLoadingText> {
+  int _index = 0;
+  // 模拟 AI 思考的步骤文案
+  final List<String> _steps = [
+    "正在拆解原始指令...",
+    "识别关键决策变量...",
+    "设计互斥选项...",
+    "构建思维链架构...",
+    "优化选项维度...",
+  ];
+  late final java_async.Timer _timer; // 注意引入 import 'dart:async' as java_async;
 
   @override
   void initState() {
     super.initState();
-    _customInputController = TextEditingController(text: widget.step.selected);
-  }
-
-  @override
-  void didUpdateWidget(covariant WizardOptionCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.step.selected == null || widget.step.selected!.isEmpty) {
-      if (_customInputController.text.isNotEmpty) _customInputController.clear();
-    }
+    // 每 1.5 秒切换一次文案
+    _timer = java_async.Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (mounted) {
+        setState(() {
+          _index = (_index + 1) % _steps.length;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _customInputController.dispose();
+    _timer.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
-    final step = widget.step;
-    final bool isCustomInput = step.selected != null && step.selected!.isNotEmpty && !step.options.contains(step.selected);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 20),
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
-                IconButton(
-                  icon: Icon(Icons.close, color: theme.colorScheme.outline),
-                  tooltip: AppStrings.get('deleteDimension', widget.lang),
-                  onPressed: () => widget.notifier.removeDimension(step),
-                  visualDensity: VisualDensity.compact,
-                )
-              ],
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: step.options.map((opt) {
-                final isSelected = step.selected == opt;
-                return FilterChip(
-                  label: Text(opt),
-                  selected: isSelected,
-                  onSelected: (_) {
-                    _customInputController.clear();
-                    widget.notifier.selectWizardOption(step, opt);
-                  },
-                  showCheckmark: false,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  selectedColor: theme.colorScheme.surfaceContainerHighest,
-                  labelStyle: TextStyle(color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, fontSize: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: isSelected ? theme.colorScheme.primary : theme.colorScheme.outline, width: isSelected ? 1.5 : 1)),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _customInputController,
-              onChanged: (val) => widget.notifier.selectWizardOption(step, val),
-              decoration: InputDecoration(
-                hintText: AppStrings.get('customOptionHint', widget.lang),
-                hintStyle: TextStyle(color: theme.colorScheme.outline),
-                filled: true,
-                fillColor: theme.colorScheme.surface,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                enabledBorder: isCustomInput ? OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary, width: 1)) : null,
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary, width: 2)),
-              ),
-              style: const TextStyle(fontSize: 14),
-            ),
-          ],
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      child: Text(
+        "$_index. ${_steps[_index]}", // 显示序号增加真实感
+        key: ValueKey<int>(_index),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.secondary, 
+          fontWeight: FontWeight.w500,
+          fontSize: 15,
         ),
       ),
-    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
+    );
   }
 }
